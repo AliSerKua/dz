@@ -1,20 +1,35 @@
 using UnityEngine;
 using System.Collections.Generic;
+using static AmmoBox;
+using static Weapon;
 
 public class WeaponManager : MonoBehaviour
 {
-    public static WeaponManager instance;
-
-    [Tooltip("Список слотов для оружия (обязательно инициализируй в инспекторе!)")]
+    
+    public static WeaponManager Instance { get; private set; }
     public List<GameObject> weaponSlots;
-
-    [Tooltip("Текущий активный слот")]
     public GameObject activeWeaponSlot;
 
+    [Header("Ammo")]
+    public int totalRifleAmmo = 0;
+    public int totalPistolAmmo = 0;
+    private bool isReloading = false;
+
+    public bool IsReloading()
+    {
+        return isReloading;
+    }
+
+    public void SetReloading(bool value)
+    {
+        isReloading = value;
+    }
     void Awake()
     {
-        if (instance == null)
-            instance = this;
+        if (Instance == null)
+        {
+            Instance = this;
+        }
         else
         {
             Destroy(gameObject);
@@ -24,13 +39,6 @@ public class WeaponManager : MonoBehaviour
 
     void Start()
     {
-        if (weaponSlots == null || weaponSlots.Count == 0)
-        {
-            Debug.LogError("Weapon slots not assigned!");
-            return;
-        }
-
-        // Безопасное назначение первого слота
         activeWeaponSlot = weaponSlots[0];
     }
 
@@ -63,11 +71,7 @@ public class WeaponManager : MonoBehaviour
         pickedupWeapon.transform.SetParent(activeWeaponSlot.transform, false);
 
         Weapon weapon = pickedupWeapon.GetComponent<Weapon>();
-        if (weapon == null)
-        {
-            Debug.LogWarning("Picked up object has no Weapon script!");
-            return;
-        }
+      
 
         pickedupWeapon.transform.localPosition = weapon.spawnPosition;
         pickedupWeapon.transform.localRotation = Quaternion.Euler(weapon.spawnRotation);
@@ -110,8 +114,25 @@ public class WeaponManager : MonoBehaviour
         rb.AddForce(Camera.main.transform.forward * 3f + Vector3.up * 2f, ForceMode.Impulse);
     }
 
+    internal void PickupAmmo(AmmoBox ammo)
+    {
+        switch (ammo.ammoType)
+        {
+            case AmmoBox.AmmoType.PistolAmmo:
+                totalPistolAmmo += ammo.ammoAmount;
+                break;
+
+            case AmmoBox.AmmoType.RifleAmmo:
+                totalRifleAmmo += ammo.ammoAmount;
+                break;
+        }
+    }
+
     public void SwitchActiveSlot(int slotNumber)
     {
+        if (IsReloading())
+            return;
+
         if (slotNumber < 0 || slotNumber >= weaponSlots.Count)
             return;
 
@@ -131,6 +152,42 @@ public class WeaponManager : MonoBehaviour
         {
             Weapon newWeapon = activeWeaponSlot.transform.GetChild(0).GetComponent<Weapon>();
             if (newWeapon != null) newWeapon.isActiveWeapon = true;
+        }
+    }
+
+    internal void DecreaseTotalAmmo(int bulletsToDecrease, Weapon.WeaponModel thisWeaponModel)
+    {
+        switch (thisWeaponModel)
+        {
+            case Weapon.WeaponModel.A47:
+                totalRifleAmmo -= bulletsToDecrease;
+                break;
+
+            case Weapon.WeaponModel.M4:
+                totalRifleAmmo -= bulletsToDecrease;
+                break;
+
+            case Weapon.WeaponModel.P2:
+                totalPistolAmmo -= bulletsToDecrease;
+                break;
+        }
+    }
+
+    public int CheckAmmoLeftFor(Weapon.WeaponModel thisWeaponModel)
+    {
+        switch (thisWeaponModel)
+        {
+            case Weapon.WeaponModel.A47:
+                return totalRifleAmmo;
+
+            case Weapon.WeaponModel.M4:
+                return totalRifleAmmo;
+
+            case Weapon.WeaponModel.P2:
+                return totalPistolAmmo;
+
+            default:
+                return 0;
         }
     }
 }

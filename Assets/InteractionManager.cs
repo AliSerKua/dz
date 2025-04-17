@@ -6,6 +6,7 @@ public class InteractionManager : MonoBehaviour
 {
     public static InteractionManager Instance { get; private set; }
     public Weapon hoveredWeapon = null;
+    public AmmoBox hoveredAmmoBox = null;
 
     private void Awake()
     {
@@ -24,14 +25,22 @@ public class InteractionManager : MonoBehaviour
         {
             GameObject objectHit = hit.transform.gameObject;
 
-            if (objectHit.GetComponent<Weapon>() && objectHit.GetComponent<Weapon>().isActiveWeapon == false)
+            // Взаимодействие с оружием
+            Weapon weapon = objectHit.GetComponent<Weapon>();
+            if (weapon && !weapon.isActiveWeapon)
             {
-                hoveredWeapon = objectHit.GetComponent<Weapon>();
-                hoveredWeapon.GetComponent<Outline>().enabled = true;
+                if (hoveredWeapon != weapon)
+                {
+                    if (hoveredWeapon)
+                        hoveredWeapon.GetComponent<Outline>().enabled = false;
+
+                    hoveredWeapon = weapon;
+                    hoveredWeapon.GetComponent<Outline>().enabled = true;
+                }
 
                 if (Input.GetKeyDown(KeyCode.F))
                 {
-                    WeaponManager.instance.PickupWeapon(objectHit);
+                    WeaponManager.Instance.PickupWeapon(objectHit);
                 }
             }
             else
@@ -42,14 +51,50 @@ public class InteractionManager : MonoBehaviour
                     hoveredWeapon = null;
                 }
             }
+
+            // Взаимодействие с ящиком патронов
+            AmmoBox ammoBox = objectHit.GetComponent<AmmoBox>();
+            if (ammoBox)
+            {
+                if (hoveredAmmoBox != ammoBox)
+                {
+                    if (hoveredAmmoBox)
+                        hoveredAmmoBox.GetComponent<Outline>().enabled = false;
+
+                    hoveredAmmoBox = ammoBox;
+                    hoveredAmmoBox.GetComponent<Outline>().enabled = true;
+                }
+
+                if (Input.GetKeyDown(KeyCode.F))
+                {
+                    WeaponManager.Instance.PickupAmmo(hoveredAmmoBox);
+                    Destroy(objectHit.gameObject);
+                }
+            }
+            else
+            {
+                if (hoveredAmmoBox)
+                {
+                    hoveredAmmoBox.GetComponent<Outline>().enabled = false;
+                    hoveredAmmoBox = null;
+                }
+            }
         }
         else
         {
+            
             if (hoveredWeapon)
             {
                 hoveredWeapon.GetComponent<Outline>().enabled = false;
                 hoveredWeapon = null;
             }
+
+            if (hoveredAmmoBox)
+            {
+                hoveredAmmoBox.GetComponent<Outline>().enabled = false;
+                hoveredAmmoBox = null;
+            }
         }
     }
 }
+        
