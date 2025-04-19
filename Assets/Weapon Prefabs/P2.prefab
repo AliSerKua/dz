@@ -5321,6 +5321,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6ba49a85c37fcb84eac1aace88d3c044, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  fireMode: 0
+  burstCount: 3
   thisWeaponModel: 1
   isActiveWeapon: 0
   damage: 21
@@ -5330,6 +5332,11 @@ MonoBehaviour:
   reserveAmmo: 300
   currentAmmo: 0
   reloadTime: 2
+  scopeUI: {fileID: 0}
+  scopedFOV: 15
+  spreadIntensity: 0
+  hipSpreadIntensity: 0.02
+  adsSpreadIntensity: 0
   muzzleFlash: {fileID: 117742382225817703}
   bulletSpawn: {fileID: 7253877176253414625}
   shotSFX: {fileID: 8300000, guid: 4b13fd454dfb10c49812a0a332fb7fda, type: 3}

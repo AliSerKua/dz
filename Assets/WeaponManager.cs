@@ -2,92 +2,118 @@ using UnityEngine;
 using System.Collections.Generic;
 using static AmmoBox;
 using static Weapon;
+using System;
 
 public class WeaponManager : MonoBehaviour
 {
-    
     public static WeaponManager Instance { get; private set; }
+
+    [Header("Weapon Slots")]
     public List<GameObject> weaponSlots;
     public GameObject activeWeaponSlot;
 
     [Header("Ammo")]
     public int totalRifleAmmo = 0;
     public int totalPistolAmmo = 0;
+    public int totalShotGunAmmo = 0;
+
+
+    [Header("Throwables")]
+    public int grenades = 0;
+    public float throwForce = 40f;
+    public GameObject grenadePrefab;
+    public GameObject throwableSpawn;
+    public float forceMultiplier = 0f;
+    public float forceMultiplierLimit = 2f;
+
+
     private bool isReloading = false;
+    
 
-    public bool IsReloading()
-    {
-        return isReloading;
-    }
+    public bool IsReloading() => isReloading;
+    public void SetReloading(bool value) => isReloading = value;
 
-    public void SetReloading(bool value)
+
+
+
+    private void Awake()
     {
-        isReloading = value;
-    }
-    void Awake()
-    {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
+        Instance = this;
     }
 
-    void Start()
+    private void Start()
     {
-        activeWeaponSlot = weaponSlots[0];
+        if (weaponSlots.Count > 0)
+            activeWeaponSlot = weaponSlots[0];
     }
 
-    void Update()
+    private void Update()
     {
-        // Безопасное переключение активного слота
-        for (int i = 0; i < weaponSlots.Count; i++)
+        
+        foreach (var slot in weaponSlots)
         {
-            if (weaponSlots[i] == null) continue;
-
-            weaponSlots[i].SetActive(weaponSlots[i] == activeWeaponSlot);
+            if (slot == null) continue;
+            slot.SetActive(slot == activeWeaponSlot);
         }
 
-        // Переключение оружия по клавишам
         if (Input.GetKeyDown(KeyCode.Alpha1)) SwitchActiveSlot(0);
         if (Input.GetKeyDown(KeyCode.Alpha2)) SwitchActiveSlot(1);
+
+       
+        if (Input.GetKey(KeyCode.G))
+        {
+            forceMultiplier += Time.deltaTime * 1.5f; 
+            forceMultiplier = Mathf.Clamp(forceMultiplier, 0f, forceMultiplierLimit);
+        }
+
+       
+        if (Input.GetKeyUp(KeyCode.G))
+        {
+            if (grenades > 0)
+            {
+                ThrowLethal();
+            }
+            forceMultiplier = 0f; 
+        }
     }
 
-    public void PickupWeapon(GameObject pickedupWeapon)
-    {
-        if (pickedupWeapon == null || activeWeaponSlot == null) return;
 
-        AddWeaponIntoActiveSlot(pickedupWeapon);
+    public void PickupWeapon(GameObject pickedUpWeapon)
+    {
+        if (pickedUpWeapon == null || activeWeaponSlot == null) return;
+        AddWeaponIntoActiveSlot(pickedUpWeapon);
     }
 
     private void AddWeaponIntoActiveSlot(GameObject pickedupWeapon)
     {
-        DropCurrentWeapon();
+        // Сохраняем позицию и поворот, где стоит новое оружие
+        Vector3 newWeaponPosition = pickedupWeapon.transform.position;
+        Quaternion newWeaponRotation = pickedupWeapon.transform.rotation;
 
+        // Выбрасываем старое оружие в ту же позицию и ориентацию
+        DropCurrentWeapon(newWeaponPosition, newWeaponRotation);
+
+        // Устанавливаем новое оружие в слот
         pickedupWeapon.transform.SetParent(activeWeaponSlot.transform, false);
 
         Weapon weapon = pickedupWeapon.GetComponent<Weapon>();
-      
-
         pickedupWeapon.transform.localPosition = weapon.spawnPosition;
         pickedupWeapon.transform.localRotation = Quaternion.Euler(weapon.spawnRotation);
 
         weapon.isActiveWeapon = true;
         weapon.animator.enabled = true;
 
-        // Удаляем физику
-        Rigidbody rb = pickedupWeapon.GetComponent<Rigidbody>();
-        if (rb != null) Destroy(rb);
-
-        Collider col = pickedupWeapon.GetComponent<Collider>();
-        if (col != null) Destroy(col);
+        // Удаление Rigidbody и Collider
+        DestroyImmediate(pickedupWeapon.GetComponent<Rigidbody>());
+        DestroyImmediate(pickedupWeapon.GetComponent<Collider>());
     }
 
-    private void DropCurrentWeapon()
+    private void DropCurrentWeapon(Vector3 dropPosition, Quaternion dropRotation)
     {
         if (activeWeaponSlot == null || activeWeaponSlot.transform.childCount == 0) return;
 
@@ -103,91 +129,160 @@ public class WeaponManager : MonoBehaviour
 
         weaponToDrop.transform.SetParent(null);
 
-        if (weaponToDrop.GetComponent<Rigidbody>() == null)
-            weaponToDrop.AddComponent<Rigidbody>();
+        // Устанавливаем позицию и поворот
+        weaponToDrop.transform.position = dropPosition;
+        weaponToDrop.transform.rotation = dropRotation;
 
-        if (weaponToDrop.GetComponent<Collider>() == null)
-            weaponToDrop.AddComponent<BoxCollider>();
+        // Добавляем коллайдер если отсутствует
+        if (!weaponToDrop.TryGetComponent<Collider>(out Collider col))
+        {
+            col = weaponToDrop.AddComponent<BoxCollider>();
+        }
+        col.isTrigger = false;
 
-        Rigidbody rb = weaponToDrop.GetComponent<Rigidbody>();
-        rb.isKinematic = false;
-        rb.AddForce(Camera.main.transform.forward * 3f + Vector3.up * 2f, ForceMode.Impulse);
+        // Добавляем rigidbody если отсутствует
+        if (!weaponToDrop.TryGetComponent<Rigidbody>(out Rigidbody rb))
+        {
+            rb = weaponToDrop.AddComponent<Rigidbody>();
+        }
+
+        rb.isKinematic = true;  // Не будет падать/двигаться
+        rb.useGravity = false;  // Не будет притягиваться к земле
     }
 
-    internal void PickupAmmo(AmmoBox ammo)
+
+    public void PickupAmmo(AmmoBox ammo)
     {
         switch (ammo.ammoType)
         {
-            case AmmoBox.AmmoType.PistolAmmo:
+            case AmmoType.PistolAmmo:
                 totalPistolAmmo += ammo.ammoAmount;
                 break;
 
-            case AmmoBox.AmmoType.RifleAmmo:
+            case AmmoType.RifleAmmo:
                 totalRifleAmmo += ammo.ammoAmount;
+                break;
+
+            case AmmoType.ShotGunAmmo:
+                totalShotGunAmmo += ammo.ammoAmount;
                 break;
         }
     }
 
     public void SwitchActiveSlot(int slotNumber)
     {
-        if (IsReloading())
+        if (IsReloading() || slotNumber < 0 || slotNumber >= weaponSlots.Count || weaponSlots[slotNumber] == null)
             return;
 
-        if (slotNumber < 0 || slotNumber >= weaponSlots.Count)
-            return;
-
-        if (weaponSlots[slotNumber] == null) return;
-
-        // Деактивируем текущее оружие
-        if (activeWeaponSlot != null && activeWeaponSlot.transform.childCount > 0)
+        // Деактивация текущего оружия
+        if (activeWeaponSlot?.transform.childCount > 0)
         {
-            Weapon currentWeapon = activeWeaponSlot.transform.GetChild(0).GetComponent<Weapon>();
-            if (currentWeapon != null) currentWeapon.isActiveWeapon = false;
+            Weapon current = activeWeaponSlot.transform.GetChild(0).GetComponent<Weapon>();
+            if (current != null) current.isActiveWeapon = false;
         }
 
         activeWeaponSlot = weaponSlots[slotNumber];
 
-        // Активируем новое оружие
-        if (activeWeaponSlot != null && activeWeaponSlot.transform.childCount > 0)
+        // Активация нового оружия
+        if (activeWeaponSlot.transform.childCount > 0)
         {
             Weapon newWeapon = activeWeaponSlot.transform.GetChild(0).GetComponent<Weapon>();
             if (newWeapon != null) newWeapon.isActiveWeapon = true;
         }
     }
 
-    internal void DecreaseTotalAmmo(int bulletsToDecrease, Weapon.WeaponModel thisWeaponModel)
+    public void DecreaseTotalAmmo(int bulletsToDecrease, WeaponModel model)
     {
-        switch (thisWeaponModel)
+        switch (model)
         {
-            case Weapon.WeaponModel.A47:
-                totalRifleAmmo -= bulletsToDecrease;
+            case WeaponModel.A47:
+            case WeaponModel.M4:
+            case WeaponModel.M107:
+                totalRifleAmmo = Mathf.Max(0, totalRifleAmmo - bulletsToDecrease);
                 break;
 
-            case Weapon.WeaponModel.M4:
-                totalRifleAmmo -= bulletsToDecrease;
+            case WeaponModel.P2:
+                totalPistolAmmo = Mathf.Max(0, totalPistolAmmo - bulletsToDecrease);
                 break;
 
-            case Weapon.WeaponModel.P2:
-                totalPistolAmmo -= bulletsToDecrease;
+            case WeaponModel.SPAS:
+                totalShotGunAmmo = Mathf.Max(0, totalShotGunAmmo - bulletsToDecrease);
                 break;
         }
     }
 
-    public int CheckAmmoLeftFor(Weapon.WeaponModel thisWeaponModel)
+    public int CheckAmmoLeftFor(WeaponModel model)
     {
-        switch (thisWeaponModel)
+        return model switch
         {
-            case Weapon.WeaponModel.A47:
-                return totalRifleAmmo;
+            WeaponModel.A47 or WeaponModel.M4 or WeaponModel.M107 => totalRifleAmmo,
+            WeaponModel.SPAS => totalShotGunAmmo,
+            WeaponModel.P2 => totalPistolAmmo,
+            _ => 0
+        };
+    }
 
-            case Weapon.WeaponModel.M4:
-                return totalRifleAmmo;
+    private void DestroyIfExists<T>(GameObject obj) where T : Component
+    {
+        T component = obj.GetComponent<T>();
+        if (component != null)
+            Destroy(component);
+    }
 
-            case Weapon.WeaponModel.P2:
-                return totalPistolAmmo;
-
-            default:
-                return 0;
+    public void PickupThrowable(Throwable throwable)
+    {
+        switch (throwable.throwableType)
+           {
+            case Throwable.ThrowableType.Grenade:
+                PickupGrenade();
+                break;
         }
     }
+
+    private void PickupGrenade()
+    {
+        grenades += 1;
+
+        HUDManager.Instance.UpdateThrowables(Throwable.ThrowableType.Grenade);
+    }
+
+    private void ThrowLethal()
+    {
+        if (grenadePrefab == null)
+        {
+            Debug.LogError("Grenade prefab is missing!");
+            return;
+        }
+
+        if (throwableSpawn == null)
+        {
+            Debug.LogError("Throwable spawn point is missing!");
+            return;
+        }
+
+        if (Camera.main == null)
+        {
+            Debug.LogError("Main camera is missing!");
+            return;
+        }
+
+        GameObject throwable = Instantiate(grenadePrefab, throwableSpawn.transform.position, Camera.main.transform.rotation);
+        if (throwable == null) return;
+
+        Rigidbody rb = throwable.GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            rb.AddForce(Camera.main.transform.forward * (throwForce * forceMultiplier), ForceMode.Impulse);
+        }
+
+        Throwable throwableComponent = throwable.GetComponent<Throwable>();
+        if (throwableComponent != null)
+        {
+            throwableComponent.hasBeenThrow = true;
+        }
+
+        grenades -= 1;
+        HUDManager.Instance?.UpdateThrowables(Throwable.ThrowableType.Grenade);
+    }
+
 }

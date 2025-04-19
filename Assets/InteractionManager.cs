@@ -7,6 +7,7 @@ public class InteractionManager : MonoBehaviour
     public static InteractionManager Instance { get; private set; }
     public Weapon hoveredWeapon = null;
     public AmmoBox hoveredAmmoBox = null;
+    public Throwable hoveredThrowable = null;
 
     private void Awake()
     {
@@ -79,10 +80,37 @@ public class InteractionManager : MonoBehaviour
                     hoveredAmmoBox = null;
                 }
             }
+
+            // Взаимодействие с гранатой
+            Throwable throwable = objectHit.GetComponent<Throwable>();
+            if (throwable)
+            {
+                if (hoveredThrowable != throwable)
+                {
+                    if (hoveredThrowable)
+                        hoveredThrowable.GetComponent<Outline>().enabled = false;
+
+                    hoveredThrowable = throwable;
+                    hoveredThrowable.GetComponent<Outline>().enabled = true;
+                }
+
+                if (Input.GetKeyDown(KeyCode.F))
+                {
+                    WeaponManager.Instance.PickupThrowable(throwable);
+                    Destroy(objectHit.gameObject);
+                }
+            }
+            else
+            {
+                if (hoveredThrowable)
+                {
+                    hoveredThrowable.GetComponent<Outline>().enabled = false;
+                    hoveredThrowable = null;
+                }
+            }
         }
         else
         {
-            
             if (hoveredWeapon)
             {
                 hoveredWeapon.GetComponent<Outline>().enabled = false;
@@ -94,7 +122,12 @@ public class InteractionManager : MonoBehaviour
                 hoveredAmmoBox.GetComponent<Outline>().enabled = false;
                 hoveredAmmoBox = null;
             }
+
+            if (hoveredThrowable)
+            {
+                hoveredThrowable.GetComponent<Outline>().enabled = false;
+                hoveredThrowable = null;
+            }
         }
     }
 }
-        

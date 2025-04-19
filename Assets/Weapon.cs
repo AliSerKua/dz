@@ -8,7 +8,9 @@ public class Weapon : MonoBehaviour
     {
         A47,
         M4,
-        P2
+        M107,
+        P2,
+        SPAS
     }
 
     public enum FireMode
@@ -19,8 +21,8 @@ public class Weapon : MonoBehaviour
     }
 
     public FireMode fireMode = FireMode.Single;
-    public int burstCount = 3; // для очереди
- 
+    public int burstCount = 3;
+
     public WeaponModel thisWeaponModel;
 
     public bool isActiveWeapon;
@@ -31,6 +33,16 @@ public class Weapon : MonoBehaviour
     public int reserveAmmo = 30;
     public int currentAmmo;
     public float reloadTime = 2f;
+
+    public GameObject scopeUI;
+    public float scopedFOV = 15f;
+    private float defaultFOV;
+    private bool isScoped = false;
+
+    [Header("Shotgun Settings")]
+    public bool isShotgun = false;
+    public int pelletCount = 10;
+    public float pelletSpreadAngle = 5f;
 
     public float spreadIntensity;
     public float hipSpreadIntensity;
@@ -53,54 +65,81 @@ public class Weapon : MonoBehaviour
     public Vector3 spawnRotation;
 
     bool isADS;
-    bool fireButtonReleased = true; // для одиночного режима
+    bool fireButtonReleased = true;
 
     void Start()
     {
         currentAmmo = maxAmmo;
+
         if (_cam != null)
+        {
             originalRotation = _cam.transform.localEulerAngles;
+            defaultFOV = _cam.fieldOfView;
+        }
+
         animator = GetComponent<Animator>();
+
+        if (scopeUI != null)
+            scopeUI.SetActive(false);
     }
 
     void Update()
     {
-        if (isActiveWeapon)
+        if (!isActiveWeapon) return;
+
+        if (Input.GetKeyDown(KeyCode.B))
         {
-            if (Input.GetKeyDown(KeyCode.B))
-            {
-                SwitchFireMode();
-            }
+            SwitchFireMode();
+        }
 
-            if (Input.GetMouseButtonDown(1))
-            {
-                animator.SetTrigger("enterADS");
-                isADS = true;
+        if (Input.GetMouseButtonDown(1))
+        {
+            animator.SetTrigger("enterADS");
+            isADS = true;
+            if (HUDManager.Instance != null && HUDManager.Instance.middleDot != null)
                 HUDManager.Instance.middleDot.SetActive(false);
-            }
 
-            if (Input.GetMouseButtonUp(1))
+            if (thisWeaponModel == WeaponModel.M107)
             {
-                animator.SetTrigger("exitADS");
-                isADS = false;
+                isScoped = true;
+                if (scopeUI != null)
+                    scopeUI.SetActive(true);
+                if (_cam != null)
+                    _cam.fieldOfView = scopedFOV;
+            }
+        }
+
+        if (Input.GetMouseButtonUp(1))
+        {
+            animator.SetTrigger("exitADS");
+            isADS = false;
+            if (HUDManager.Instance != null && HUDManager.Instance.middleDot != null)
                 HUDManager.Instance.middleDot.SetActive(true);
-            }
 
-            GetComponent<Outline>().enabled = false;
-
-            if (isReloading) return;
-
-            HandleShooting();
-
-            if (Input.GetKeyDown(KeyCode.R) && currentAmmo < maxAmmo && reserveAmmo > 0 && WeaponManager.Instance.CheckAmmoLeftFor(thisWeaponModel) > 0)
+            if (thisWeaponModel == WeaponModel.M107)
             {
-                StartCoroutine(Reload());
+                isScoped = false;
+                if (scopeUI != null)
+                    scopeUI.SetActive(false);
+                if (_cam != null)
+                    _cam.fieldOfView = defaultFOV;
             }
+        }
 
-            if (_cam != null)
-            {
-                _cam.transform.localEulerAngles = Vector3.Lerp(_cam.transform.localEulerAngles, originalRotation, Time.deltaTime * 5f);
-            }
+        GetComponent<Outline>().enabled = false;
+
+        if (isReloading) return;
+
+        HandleShooting();
+
+        if (Input.GetKeyDown(KeyCode.R) && currentAmmo < maxAmmo && reserveAmmo > 0 && WeaponManager.Instance.CheckAmmoLeftFor(thisWeaponModel) > 0)
+        {
+            StartCoroutine(Reload());
+        }
+
+        if (_cam != null)
+        {
+            _cam.transform.localEulerAngles = Vector3.Lerp(_cam.transform.localEulerAngles, originalRotation, Time.deltaTime * 5f);
         }
     }
 
@@ -161,23 +200,6 @@ public class Weapon : MonoBehaviour
     {
         currentAmmo--;
 
-        float spread = isADS ? adsSpreadIntensity : hipSpreadIntensity;
-
-        Vector3 spreadDirection = bulletSpawn.forward +
-                                  bulletSpawn.up * UnityEngine.Random.Range(-spread, spread) +
-                                  bulletSpawn.right * UnityEngine.Random.Range(-spread, spread);
-        spreadDirection.Normalize();
-
-        RaycastHit hit;
-        if (Physics.Raycast(bulletSpawn.position, spreadDirection, out hit, 100f))
-        {
-            if (hitEffect != null)
-            {
-                GameObject impactGO = Instantiate(hitEffect, hit.point, Quaternion.LookRotation(hit.normal));
-                Destroy(impactGO, 1f);
-            }
-        }
-
         if (audioSource && shotSFX)
             audioSource.PlayOneShot(shotSFX);
 
@@ -187,19 +209,64 @@ public class Weapon : MonoBehaviour
             muzzleFlash.Play();
         }
 
-        if (isADS)
-            animator.SetTrigger("RECOIL_ADS");
-        else
-            animator.SetTrigger("RECOIL");
+        if (animator)
+            animator.SetTrigger(isADS ? "RECOIL_ADS" : "RECOIL");
 
-        GameObject bullet = BulletPool.Instance.GetBullet(bulletSpawn.position, Quaternion.LookRotation(spreadDirection));
-        Rigidbody rb = bullet.GetComponent<Rigidbody>();
-        if (rb != null)
+        if (isShotgun)
         {
-            rb.velocity = Vector3.zero;
-            rb.AddForce(spreadDirection * force, ForceMode.Impulse);
+            for (int i = 0; i < pelletCount; i++)
+            {
+                Vector3 spreadDir = Quaternion.Euler(
+                    UnityEngine.Random.Range(-pelletSpreadAngle, pelletSpreadAngle),
+                    UnityEngine.Random.Range(-pelletSpreadAngle, pelletSpreadAngle),
+                    0) * bulletSpawn.forward;
+
+                if (Physics.Raycast(bulletSpawn.position, spreadDir, out RaycastHit hit, 100f))
+                {
+                    if (hitEffect != null)
+                    {
+                        GameObject impactGO = Instantiate(hitEffect, hit.point, Quaternion.LookRotation(hit.normal));
+                        Destroy(impactGO, 1f);
+                    }
+                }
+
+                GameObject pellet = BulletPool.Instance.GetBullet(bulletSpawn.position, Quaternion.LookRotation(spreadDir));
+                Rigidbody rb = pellet.GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.velocity = Vector3.zero;
+                    rb.AddForce(spreadDir * force, ForceMode.Impulse);
+                }
+            }
+        }
+        else
+        {
+            float spread = isADS ? adsSpreadIntensity : hipSpreadIntensity;
+
+            Vector3 spreadDirection = bulletSpawn.forward +
+                                      bulletSpawn.up * UnityEngine.Random.Range(-spread, spread) +
+                                      bulletSpawn.right * UnityEngine.Random.Range(-spread, spread);
+            spreadDirection.Normalize();
+
+            if (Physics.Raycast(bulletSpawn.position, spreadDirection, out RaycastHit hit, 100f))
+            {
+                if (hitEffect != null)
+                {
+                    GameObject impactGO = Instantiate(hitEffect, hit.point, Quaternion.LookRotation(hit.normal));
+                    Destroy(impactGO, 1f);
+                }
+            }
+
+            GameObject bullet = BulletPool.Instance.GetBullet(bulletSpawn.position, Quaternion.LookRotation(spreadDirection));
+            Rigidbody rb = bullet.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.velocity = Vector3.zero;
+                rb.AddForce(spreadDirection * force, ForceMode.Impulse);
+            }
         }
     }
+
 
     IEnumerator Reload()
     {
@@ -225,5 +292,19 @@ public class Weapon : MonoBehaviour
 
         isReloading = false;
         WeaponManager.Instance.SetReloading(false);
+    }
+
+    void OnDisable()
+    {
+        if (thisWeaponModel == WeaponModel.M107)
+        {
+            isScoped = false;
+
+            if (scopeUI != null && scopeUI.gameObject != null)
+                scopeUI.SetActive(false);
+
+            if (_cam != null)
+                _cam.fieldOfView = defaultFOV;
+        }
     }
 }

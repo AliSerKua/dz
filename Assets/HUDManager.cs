@@ -1,6 +1,8 @@
 ﻿using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections.Generic;
+using System;
 
 public class HUDManager : MonoBehaviour
 {
@@ -24,6 +26,24 @@ public class HUDManager : MonoBehaviour
     public Sprite emptySlot;
     public GameObject middleDot;
 
+    private readonly Dictionary<Weapon.WeaponModel, string> ammoSprites = new()
+    {
+        { Weapon.WeaponModel.P2, "Pistol_Ammo" },
+        { Weapon.WeaponModel.A47, "Rifle_Ammo" },
+        { Weapon.WeaponModel.M107, "Rifle_Ammo" },
+        { Weapon.WeaponModel.M4, "Rifle_Ammo" },
+        { Weapon.WeaponModel.SPAS, "ShotGun_Ammo" }
+    };
+
+    private readonly Dictionary<Weapon.WeaponModel, string> weaponSprites = new()
+    {
+        { Weapon.WeaponModel.P2, "P2_Weapon" },
+        { Weapon.WeaponModel.A47, "A47_Weapon" },
+        { Weapon.WeaponModel.M107, "SniperRifle_Weapon" },
+        { Weapon.WeaponModel.M4, "M4_Weapon" },
+        { Weapon.WeaponModel.SPAS, "Shotgun_Weapon" }
+    };
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -38,16 +58,17 @@ public class HUDManager : MonoBehaviour
 
     private void Update()
     {
-        if (WeaponManager.Instance == null || WeaponManager.Instance.activeWeaponSlot == null)
+        var weaponManager = WeaponManager.Instance;
+        if (weaponManager == null || weaponManager.activeWeaponSlot == null)
             return;
 
-        Weapon activeWeapon = WeaponManager.Instance.activeWeaponSlot.GetComponentInChildren<Weapon>();
+        Weapon activeWeapon = weaponManager.activeWeaponSlot.GetComponentInChildren<Weapon>();
         Weapon unActiveWeapon = GetUnActiveWeaponSlot()?.GetComponentInChildren<Weapon>();
 
         if (activeWeapon)
         {
             magazineAmmoUI.text = $"{activeWeapon.currentAmmo}";
-            totalAmmoUI.text = $"{WeaponManager.Instance.CheckAmmoLeftFor(activeWeapon.thisWeaponModel)}";
+            totalAmmoUI.text = $"{weaponManager.CheckAmmoLeftFor(activeWeapon.thisWeaponModel)}";
 
             Weapon.WeaponModel model = activeWeapon.thisWeaponModel;
 
@@ -86,51 +107,18 @@ public class HUDManager : MonoBehaviour
 
     private Sprite GetAmmoSprite(Weapon.WeaponModel model)
     {
-        string ammoPrefabPath = string.Empty;
+        if (!ammoSprites.TryGetValue(model, out var prefabPath))
+            return emptySlot;
 
-        switch (model)
-        {
-            case Weapon.WeaponModel.P2:
-                ammoPrefabPath = "Pistol_Ammo";
-                break;
-            case Weapon.WeaponModel.A47:
-                ammoPrefabPath = "Rifle_Ammo";
-                break;
-
-            case Weapon.WeaponModel.M4:
-                ammoPrefabPath = "Rifle_Ammo";
-                break;
-
-            default:
-               
-                return emptySlot;
-        }
-
-        return LoadSpriteFromPrefab(ammoPrefabPath);
+        return LoadSpriteFromPrefab(prefabPath);
     }
 
     private Sprite GetWeaponSprite(Weapon.WeaponModel model)
     {
-        string weaponPrefabPath = string.Empty;
+        if (!weaponSprites.TryGetValue(model, out var prefabPath))
+            return emptySlot;
 
-        switch (model)
-        {
-            case Weapon.WeaponModel.P2:
-                weaponPrefabPath = "P2_Weapon";
-                break;
-            case Weapon.WeaponModel.A47:
-                weaponPrefabPath = "A47_Weapon";
-                break;
-
-            case Weapon.WeaponModel.M4:
-                weaponPrefabPath = "M4_Weapon";
-                break;
-            default:
-                
-                return emptySlot;
-        }
-
-        return LoadSpriteFromPrefab(weaponPrefabPath);
+        return LoadSpriteFromPrefab(prefabPath);
     }
 
     private Sprite LoadSpriteFromPrefab(string prefabName)
@@ -139,14 +127,13 @@ public class HUDManager : MonoBehaviour
 
         if (prefab == null)
         {
-            
+            Debug.LogWarning($"[HUDManager] Prefab '{prefabName}' not found in Resources.");
             return emptySlot;
         }
 
         Image image = prefab.GetComponent<Image>();
         if (image != null && image.sprite != null)
         {
-            
             return image.sprite;
         }
 
@@ -156,7 +143,18 @@ public class HUDManager : MonoBehaviour
             return sr.sprite;
         }
 
-        
+        Debug.LogWarning($"[HUDManager] No valid sprite found in prefab '{prefabName}'.");
         return emptySlot;
+    }
+
+    internal void UpdateThrowables(Throwable.ThrowableType throwable)
+    {
+        switch(throwable)
+        {
+            case Throwable.ThrowableType.Grenade:
+                lethalAmountUI.text = $"{WeaponManager.Instance.grenades}";
+                lethalUI.sprite = Resources.Load<GameObject>("Grenade").GetComponent<SpriteRenderer>().sprite;
+                break;
+        }
     }
 }
